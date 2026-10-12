@@ -1,3 +1,4 @@
+import { loose } from "@/integrations/supabase/loose";
 /**
  * sportsbook/betting.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────

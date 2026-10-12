@@ -1,3 +1,4 @@
+import { loose } from "@/integrations/supabase/loose";
 /**
  * auth/auth.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -128,7 +129,7 @@ export const getCurrentUserProfile = createServerFn({ method: "GET" })
             `Could not read or create your profile (${insertError.message}). Make sure supabase/migrations/20260101000400_password_auth.sql has been run.`,
           );
         }
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const supabaseAdmin = loose((await import("@/integrations/supabase/client.server")).supabaseAdmin);
         const { data: adminCreated, error: adminError } = await supabaseAdmin
           .from("profiles")
           .insert(insert)

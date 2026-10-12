@@ -1,3 +1,4 @@
+import { loose } from "@/integrations/supabase/loose";
 /**
  * sportsbook/booking-code.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -151,7 +152,7 @@ export const loadBookingCode = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }): Promise<BookingCodeSlip> => {
-    const { supabasePublic } = await import("@/integrations/supabase/public.server");
+    const supabasePublic = loose((await import("@/integrations/supabase/public.server")).supabasePublic);
 
     const { data: rows, error } = await supabasePublic.rpc("load_booking_code", {
       p_code: data.code,

@@ -1,3 +1,4 @@
+import { loose } from "@/integrations/supabase/loose";
 /**
  * wallet/wallet.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -112,7 +113,7 @@ async function ugxWallet(
 export const getWalletBalance = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const wallet = await ugxWallet(context.supabase, context.userId);
+    const wallet = await ugxWallet(loose(context.supabase), context.userId);
     return wallet.balance;
   });
 
@@ -201,7 +202,7 @@ export const createDeposit = createServerFn({ method: "POST" })
 
     const hasServiceRole = Boolean(process.env["SUPABASE_SERVICE_ROLE_KEY"]);
     const admin = hasServiceRole
-      ? (await import("@/integrations/supabase/client.server")).supabaseAdmin
+      ? loose((await import("@/integrations/supabase/client.server")).supabaseAdmin)
       : null;
     // Untyped on purpose: the insert goes through the admin client when a
     // service-role key is configured, otherwise through the player's own

@@ -1,3 +1,4 @@
+import { loose } from "@/integrations/supabase/loose";
 /**
  * sportsbook/catalogue.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -166,7 +167,7 @@ export const getCatalogue = createServerFn({ method: "GET" }).handler(
   async (): Promise<CataloguePayload> => {
     try {
       // Dynamic import: this module is reachable from the client bundle.
-      const { supabasePublic } = await import("@/integrations/supabase/public.server");
+      const supabasePublic = loose((await import("@/integrations/supabase/public.server")).supabasePublic);
 
       const [sportsRes, leaguesRes, teamsRes, eventsRes, typesRes, marketsRes, selectionsRes] =
         await Promise.all([

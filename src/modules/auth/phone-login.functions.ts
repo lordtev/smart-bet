@@ -1,3 +1,4 @@
+import { loose } from "@/integrations/supabase/loose";
 /**
  * auth/phone-login.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ export const resolvePhoneLogin = createServerFn({ method: "POST" })
 
     // Publishable key on purpose: the resolver decides for itself whether the
     // caller may learn the email, so no service-role key is involved.
-    const { supabasePublic } = await import("@/integrations/supabase/public.server");
+    const supabasePublic = loose((await import("@/integrations/supabase/public.server")).supabasePublic);
 
     const { data: email, error } = await supabasePublic.rpc("resolve_phone_login", {
       p_phone: phone,
