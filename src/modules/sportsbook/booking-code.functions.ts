@@ -111,7 +111,7 @@ export const createBookingCode = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ context, data }): Promise<CreateBookingCodeResult> => {
-    const { supabase } = context;
+    const supabase = loose(context.supabase);
 
     const args: { p_selection_ids: string[]; p_stake?: number } = {
       p_selection_ids: data.selectionIds,
@@ -191,7 +191,8 @@ export const loadBookingCode = createServerFn({ method: "POST" })
 export const getMyBookingCodes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<BookingCodeSummary[]> => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
 
     const { data, error } = await supabase
       .from("booking_codes")
@@ -219,7 +220,8 @@ export const deleteBookingCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input) => z.object({ code: z.string().trim().min(4).max(16) }).parse(input))
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
 
     const { error } = await supabase
       .from("booking_codes")

@@ -132,7 +132,8 @@ export const getWalletTransactions = createServerFn({ method: "GET" })
       .parse(input ?? {}),
   )
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
     const limit = data.limit ?? 50;
 
     let query = supabase
@@ -189,7 +190,8 @@ export const createDeposit = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ context, data }): Promise<DepositResult> => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
 
     if (!(await manualDepositsEnabled(supabase))) {
       throw new Error(
@@ -276,7 +278,8 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ context, data }): Promise<WithdrawalResult> => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
 
     const { data: profile } = await supabase
       .from("profiles")

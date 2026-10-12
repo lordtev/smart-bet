@@ -83,7 +83,8 @@ const isIsoDate = (v: string | null): v is string => Boolean(v && /^\d{4}-\d{2}-
 export const getCurrentUserProfile = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<UserProfile> => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
 
     const { data: existing, error: readError } = await supabase
       .from("profiles")
@@ -202,7 +203,8 @@ export const updateMyProfile = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ context, data }): Promise<UserProfile> => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
 
     const patch: TablesUpdate<"profiles"> = {};
     if (data.firstName !== undefined) patch.first_name = data.firstName;
