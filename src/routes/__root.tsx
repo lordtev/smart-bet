@@ -20,7 +20,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { BetSlipProvider } from "../lib/betslip";
+import { BetSlipProvider } from "@/lib/betslip";
 import { CatalogueProvider } from "../lib/catalogue";
 import { getCatalogue } from "../modules/sportsbook/catalogue.functions";
 import { SiteHeader } from "../components/site-header";
