@@ -1,3 +1,4 @@
+import { loose } from "@/integrations/supabase/loose";
 /**
  * wallet/wallet.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -112,7 +113,7 @@ async function ugxWallet(
 export const getWalletBalance = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const wallet = await ugxWallet(context.supabase, context.userId);
+    const wallet = await ugxWallet(loose(context.supabase), context.userId);
     return wallet.balance;
   });
 
@@ -131,7 +132,8 @@ export const getWalletTransactions = createServerFn({ method: "GET" })
       .parse(input ?? {}),
   )
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
     const limit = data.limit ?? 50;
 
     let query = supabase
@@ -188,7 +190,8 @@ export const createDeposit = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ context, data }): Promise<DepositResult> => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
 
     if (!(await manualDepositsEnabled(supabase))) {
       throw new Error(
@@ -201,7 +204,7 @@ export const createDeposit = createServerFn({ method: "POST" })
 
     const hasServiceRole = Boolean(process.env["SUPABASE_SERVICE_ROLE_KEY"]);
     const admin = hasServiceRole
-      ? (await import("@/integrations/supabase/client.server")).supabaseAdmin
+      ? loose((await import("@/integrations/supabase/client.server")).supabaseAdmin)
       : null;
     // Untyped on purpose: the insert goes through the admin client when a
     // service-role key is configured, otherwise through the player's own
@@ -275,7 +278,8 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ context, data }): Promise<WithdrawalResult> => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
 
     const { data: profile } = await supabase
       .from("profiles")

@@ -1,3 +1,4 @@
+import { loose } from "@/integrations/supabase/loose";
 /**
  * auth/phone-auth.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -64,7 +65,7 @@ export const requestSignupOtp = createServerFn({ method: "POST" })
     if (!phone) throw new Error("Enter a valid phone number, e.g. 0772 000 000");
 
     requireServiceRole();
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = loose((await import("@/integrations/supabase/client.server")).supabaseAdmin);
 
     // Reject numbers that already have an account.
     const { data: existing } = await supabaseAdmin
@@ -122,7 +123,7 @@ export const verifyOtpAndRegister = createServerFn({ method: "POST" })
     if (!phone) throw new Error("Enter a valid phone number");
 
     requireServiceRole();
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = loose((await import("@/integrations/supabase/client.server")).supabaseAdmin);
 
     const { data: otp } = await supabaseAdmin
       .from("phone_otps")

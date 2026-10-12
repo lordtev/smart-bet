@@ -1,3 +1,4 @@
+import { loose } from "@/integrations/supabase/loose";
 /**
  * sportsbook/betting.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -95,7 +96,7 @@ export const placeBetOnServer = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ context, data }) => {
-    const { supabase } = context;
+    const supabase = loose(context.supabase);
 
     const { data: betId, error } = await supabase.rpc("place_bet", {
       p_stake: data.stake,
@@ -112,7 +113,8 @@ export const placeBetOnServer = createServerFn({ method: "POST" })
 export const getMyBets = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
     return readBets(supabase, { userId, limit: 50 });
   });
 

@@ -1,3 +1,4 @@
+import { loose } from "@/integrations/supabase/loose";
 /**
  * sportsbook/booking-code.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -110,7 +111,7 @@ export const createBookingCode = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ context, data }): Promise<CreateBookingCodeResult> => {
-    const { supabase } = context;
+    const supabase = loose(context.supabase);
 
     const args: { p_selection_ids: string[]; p_stake?: number } = {
       p_selection_ids: data.selectionIds,
@@ -151,7 +152,7 @@ export const loadBookingCode = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }): Promise<BookingCodeSlip> => {
-    const { supabasePublic } = await import("@/integrations/supabase/public.server");
+    const supabasePublic = loose((await import("@/integrations/supabase/public.server")).supabasePublic);
 
     const { data: rows, error } = await supabasePublic.rpc("load_booking_code", {
       p_code: data.code,
@@ -190,7 +191,8 @@ export const loadBookingCode = createServerFn({ method: "POST" })
 export const getMyBookingCodes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<BookingCodeSummary[]> => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
 
     const { data, error } = await supabase
       .from("booking_codes")
@@ -218,7 +220,8 @@ export const deleteBookingCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input) => z.object({ code: z.string().trim().min(4).max(16) }).parse(input))
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const supabase = loose(context.supabase);
+    const { userId } = context;
 
     const { error } = await supabase
       .from("booking_codes")
