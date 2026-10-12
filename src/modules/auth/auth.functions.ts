@@ -150,16 +150,16 @@ export const getCurrentUserProfile = createServerFn({ method: "GET" })
 
     /* ── Row present: top up any field the trigger could not fill ─────────── */
     const patch: Record<string, unknown> = {};
-    if (!existing.first_name && first) patch.first_name = first;
-    if (!existing.last_name && last) patch.last_name = last;
-    if (!existing.phone && phone) patch.phone = phone;
-    if (!existing.date_of_birth && isIsoDate(dateOfBirth)) patch.date_of_birth = dateOfBirth;
-    if (!existing.national_id && nationalId) patch.national_id = nationalId;
-    if (!existing.country_code) patch.country_code = countryCode;
+    if (!existing.first_name && first) patch["first_name"] = first;
+    if (!existing.last_name && last) patch["last_name"] = last;
+    if (!existing.phone && phone) patch["phone"] = phone;
+    if (!existing.date_of_birth && isIsoDate(dateOfBirth)) patch["date_of_birth"] = dateOfBirth;
+    if (!existing.national_id && nationalId) patch["national_id"] = nationalId;
+    if (!existing.country_code) patch["country_code"] = countryCode;
 
     // Track the sign-in (at most once every 15 minutes, to avoid write spam).
     const lastSeen = existing.last_login_at ? new Date(existing.last_login_at).getTime() : 0;
-    if (Date.now() - lastSeen > 15 * 60 * 1000) patch.last_login_at = new Date().toISOString();
+    if (Date.now() - lastSeen > 15 * 60 * 1000) patch["last_login_at"] = new Date().toISOString();
 
     if (Object.keys(patch).length > 0) {
       const { data: updated, error: patchError } = await supabase
@@ -206,18 +206,18 @@ export const updateMyProfile = createServerFn({ method: "POST" })
     const { userId } = context;
 
     const patch: Record<string, unknown> = {};
-    if (data.firstName !== undefined) patch.first_name = data.firstName;
-    if (data.lastName !== undefined) patch.last_name = data.lastName || null;
-    if (data.city !== undefined) patch.city = data.city || null;
-    if (data.nationalId !== undefined) patch.national_id = data.nationalId;
-    if (data.marketingOptIn !== undefined) patch.marketing_opt_in = data.marketingOptIn;
-    if (data.oddsFormat !== undefined) patch.odds_format = data.oddsFormat;
-    if (data.language !== undefined) patch.language = data.language;
-    if (data.dateOfBirth !== undefined) patch.date_of_birth = data.dateOfBirth;
+    if (data.firstName !== undefined) patch["first_name"] = data.firstName;
+    if (data.lastName !== undefined) patch["last_name"] = data.lastName || null;
+    if (data.city !== undefined) patch["city"] = data.city || null;
+    if (data.nationalId !== undefined) patch["national_id"] = data.nationalId;
+    if (data.marketingOptIn !== undefined) patch["marketing_opt_in"] = data.marketingOptIn;
+    if (data.oddsFormat !== undefined) patch["odds_format"] = data.oddsFormat;
+    if (data.language !== undefined) patch["language"] = data.language;
+    if (data.dateOfBirth !== undefined) patch["date_of_birth"] = data.dateOfBirth;
     if (data.phone !== undefined) {
       const normalized = normalizePhone(data.phone);
       if (!normalized) throw new Error("Enter a valid phone number, e.g. 0772 000 000");
-      patch.phone = normalized;
+      patch["phone"] = normalized;
     }
 
     if (Object.keys(patch).length === 0) {
