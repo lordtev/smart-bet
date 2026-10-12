@@ -26,7 +26,6 @@ import { loose } from "@/integrations/supabase/loose";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import type { TablesUpdate } from "@/integrations/supabase/types";
 import { normalizePhone } from "./phone";
 
 const profileSchema = z.object({
@@ -150,7 +149,7 @@ export const getCurrentUserProfile = createServerFn({ method: "GET" })
     }
 
     /* ── Row present: top up any field the trigger could not fill ─────────── */
-    const patch: TablesUpdate<"profiles"> = {};
+    const patch: Record<string, unknown> = {};
     if (!existing.first_name && first) patch.first_name = first;
     if (!existing.last_name && last) patch.last_name = last;
     if (!existing.phone && phone) patch.phone = phone;
@@ -206,7 +205,7 @@ export const updateMyProfile = createServerFn({ method: "POST" })
     const supabase = loose(context.supabase);
     const { userId } = context;
 
-    const patch: TablesUpdate<"profiles"> = {};
+    const patch: Record<string, unknown> = {};
     if (data.firstName !== undefined) patch.first_name = data.firstName;
     if (data.lastName !== undefined) patch.last_name = data.lastName || null;
     if (data.city !== undefined) patch.city = data.city || null;

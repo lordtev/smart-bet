@@ -25,7 +25,6 @@ import { loose } from "@/integrations/supabase/loose";
  * ─────────────────────────────────────────────────────────────────────────────
  */
 import { createServerFn } from "@tanstack/react-start";
-import type { Database } from "@/integrations/supabase/types";
 import {
   demoMarketOptions,
   demoSports,
@@ -38,7 +37,7 @@ import {
 } from "@/lib/betting-data";
 
 /** Fixture statuses the book publishes: anything else is finished or void. */
-const VISIBLE_EVENT_STATUS: Database["public"]["Enums"]["event_status"][] = ["scheduled", "live"];
+const VISIBLE_EVENT_STATUS: string[] = ["scheduled", "live"];
 
 export type CatalogueSport = { id: string; name: string; slug: string; count: number };
 export type CatalogueMarketType = { code: string; name: string };
