@@ -2,7 +2,8 @@ import { loose } from "@/integrations/supabase/loose";
 /**
  * auth/phone-login.functions.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Lets a player sign in with their PHONE NUMBER instead of their email.
+ * THE sign-in path — SMARTBET is phone-only, so a player signs in with the phone
+ * number they registered (there is no email address on the account).
  *
  * A phone number is not an email address, so Supabase Auth cannot check it on its
  * own (native phone auth needs the Phone provider enabled, which normally means
@@ -39,10 +40,10 @@ function humanise(message: string): string {
     return "Too many attempts for this phone number — please wait a few minutes and try again";
   }
   if (m.includes("cannot sign in with a phone number")) {
-    return "This account cannot sign in with a phone number — use your email address instead";
+    return "This account cannot sign in with a password. Please contact support.";
   }
   if (m.includes("does not exist") || m.includes("could not find the function")) {
-    return "Phone sign-in is not set up on this deployment — sign in with your email. (Run supabase/migrations/20260101000500_phone_login.sql.)";
+    return "Phone sign-in is not set up on this deployment. (Run supabase/migrations/20260101000500_phone_login.sql.)";
   }
   return message;
 }

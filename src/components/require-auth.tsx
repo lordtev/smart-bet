@@ -19,7 +19,7 @@ import { useAuth } from "@/hooks/use-auth";
 export function RequireAuth({
   children,
   title = "Sign in to continue",
-  description = "Sign in with your email and password to view this page.",
+  description = "Sign in with your phone number and password to view this page.",
 }: {
   children: ReactNode;
   title?: string;

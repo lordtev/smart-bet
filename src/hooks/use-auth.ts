@@ -1,22 +1,34 @@
 /**
  * hooks/use-auth.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * The app's authentication surface. Everything credential-related is delegated
- * to **Supabase Auth** (email + password):
+ * The app's authentication surface. SMARTBET is **phone-only**: a player signs
+ * up and signs in with a phone number and a password, and proves the number with
+ * a one-time code. No email address is collected or used anywhere.
  *
- *   signUp()            → supabase.auth.signUp({ email, password, options.data })
- *   signIn()            → supabase.auth.signInWithPassword({ email, password })
- *   sendPasswordReset() → supabase.auth.resetPasswordForEmail(email)
- *   setPassword()       → supabase.auth.updateUser({ password })
- *   signOut()           → supabase.auth.signOut()
+ * Credentials still live in **Supabase Auth** (GoTrue), which hashes the password
+ * with bcrypt, verifies it on sign-in and issues the JWT session that this app
+ * sends as a bearer token to every server function. No password ever passes
+ * through our own tables.
  *
- * Supabase (GoTrue) hashes the password with bcrypt, verifies it on sign-in and
- * issues the JWT session that this app then sends as a bearer token to every
- * server function. No password ever passes through our own tables or server code.
+ * Because GoTrue credentials require an email field, each account gets a
+ * deterministic synthetic address derived from its phone number
+ * (`phoneToAuthEmail`). It is never shown to the player, never stored on
+ * `profiles.email`, and never sent over the wire — the browser derives it
+ * locally when it needs to open a session.
  *
- * Registration details (name, phone, date of birth, National ID, terms) travel as
- * auth metadata; the `handle_new_user` trigger copies them into `profiles` and
- * creates the UGX wallet.
+ *   signInWithPhone()  → resolvePhoneLogin (phone+password → synthetic email)
+ *                        then supabase.auth.signInWithPassword
+ *   requestSignupCode()→ server fn: store a code for that number
+ *   signUp()           → server fn: verify the code + create the account
+ *                        then supabase.auth.signInWithPassword
+ *   requestResetCode() → server fn: store a reset code
+ *   resetPassword()    → server fn: verify the code + set the new password
+ *                        then supabase.auth.signInWithPassword
+ *   setPassword()      → supabase.auth.updateUser({ password })   [signed in]
+ *   signOut()          → supabase.auth.signOut()
+ *
+ * ⚠ The one-time codes are MOCKED ("12345") until an SMS gateway is connected —
+ * see modules/auth/phone.ts. The verification is real; only delivery is stubbed.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 import { useCallback, useEffect, useState } from "react";
@@ -24,53 +36,45 @@ import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUserProfile, type UserProfile } from "@/modules/auth/auth.functions";
 import { resolvePhoneLogin } from "@/modules/auth/phone-login.functions";
-import { normalizePhone } from "@/modules/auth/phone";
+import {
+  requestPasswordResetOtp,
+  requestSignupOtp,
+  resetPasswordWithOtp,
+  verifyOtpAndRegister,
+} from "@/modules/auth/phone-auth.functions";
+import { normalizePhone, phoneToAuthEmail } from "@/modules/auth/phone";
 
 /** Minimum password length enforced here as well as in Supabase's settings. */
 export const MIN_PASSWORD_LENGTH = 8;
 
+/** The signed-in identity. The phone itself comes from `profile`. */
+export type AuthUser = { id: string };
+
 export type SignUpInput = {
   fullName: string;
-  email: string;
+  /** Any Ugandan format; normalised to E.164 before it is used. */
   phone: string;
   dateOfBirth: string;
   nationalId: string;
   password: string;
+  /** The one-time code the player typed back. */
+  code: string;
   termsAccepted: boolean;
-};
-
-export type SignUpOutcome = {
-  /** True when Supabase requires the player to click the confirmation email. */
-  needsEmailConfirmation: boolean;
-  email: string;
 };
 
 /** Turns Supabase Auth errors into messages a player can act on. */
 export function authErrorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error ?? "");
   const m = raw.toLowerCase();
-  if (m.includes("invalid login credentials")) return "Email or password is incorrect";
-  if (m.includes("email not confirmed")) {
-    return "Confirm your email address first — open the link we emailed you";
-  }
+  if (m.includes("invalid login credentials")) return "Phone number or password is incorrect";
   if (m.includes("user already registered") || m.includes("already been registered")) {
-    return "That email already has an account — sign in instead";
+    return "That phone number already has an account — sign in instead";
   }
   if (m.includes("password should be at least") || m.includes("password is too short")) {
     return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
   }
   if (m.includes("rate limit") || m.includes("too many requests")) {
     return "Too many attempts — please wait a minute and try again";
-  }
-  if (m.includes("for security purposes") || m.includes("only request this after")) {
-    return "Please wait a moment before requesting another email";
-  }
-  if (
-    m.includes("unable to validate email") ||
-    m.includes("invalid email") ||
-    m.includes("invalid format")
-  ) {
-    return "Enter a valid email address";
   }
   if (m.includes("signups not allowed") || m.includes("signup is disabled")) {
     return "New registrations are currently disabled on this project";
@@ -79,33 +83,24 @@ export function authErrorMessage(error: unknown): string {
   return raw || "Something went wrong — please try again";
 }
 
-/** Where Supabase should send confirmation / recovery links back to. */
-function authRedirectUrl(): string | undefined {
-  return typeof window === "undefined" ? undefined : `${window.location.origin}/auth`;
-}
-
-/**
- * True when a sign-in identifier is a phone number rather than an email address.
- * Anything with an "@" is treated as an email; otherwise it is a phone number.
- */
-export function isPhoneIdentifier(identifier: string): boolean {
-  const value = identifier.trim();
-  if (!value || value.includes("@")) return false;
-  return normalizePhone(value) !== null;
+/** Normalises a typed number, or throws the message the player should see. */
+export function requirePhone(input: string): string {
+  const phone = normalizePhone(input);
+  if (!phone) throw new Error("Enter a valid phone number, e.g. 0772 000 000");
+  return phone;
 }
 
 export function useAuth() {
   const fetchProfile = useServerFn(getCurrentUserProfile);
   const resolvePhone = useServerFn(resolvePhoneLogin);
-  const [user, setUser] = useState<null | { id: string; email: string | undefined }>(null);
+  const requestSignupFn = useServerFn(requestSignupOtp);
+  const registerFn = useServerFn(verifyOtpAndRegister);
+  const requestResetFn = useServerFn(requestPasswordResetOtp);
+  const resetFn = useServerFn(resetPasswordWithOtp);
+
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  /**
-   * True while the session came from a password-reset link. supabase-js strips
-   * the token out of the URL hash as soon as it loads, so this event — not the
-   * URL — is the reliable signal that the player must choose a new password.
-   */
-  const [recovery, setRecovery] = useState(false);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -128,7 +123,7 @@ export function useAuth() {
       if (!mounted) return;
 
       if (session?.user) {
-        setUser({ id: session.user.id, email: session.user.email });
+        setUser({ id: session.user.id });
         await loadProfile();
       } else {
         setUser(null);
@@ -140,18 +135,13 @@ export function useAuth() {
     load();
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY") setRecovery(true);
-      if (
-        (event === "SIGNED_IN" || event === "USER_UPDATED" || event === "PASSWORD_RECOVERY") &&
-        session?.user
-      ) {
-        setUser({ id: session.user.id, email: session.user.email });
+      if ((event === "SIGNED_IN" || event === "USER_UPDATED") && session?.user) {
+        setUser({ id: session.user.id });
         void loadProfile();
       }
       if (event === "SIGNED_OUT") {
         setUser(null);
         setProfile(null);
-        setRecovery(false);
       }
     });
 
@@ -161,57 +151,60 @@ export function useAuth() {
     };
   }, [loadProfile]);
 
-  /** Email + password sign-in, verified by Supabase. */
-  const signIn = useCallback(
+  /**
+   * Opens the session behind every flow. `email` is always the synthetic address
+   * derived from a phone number, never anything a player types.
+   */
+  const signInWithCredential = useCallback(
     async (email: string, password: string) => {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw new Error(authErrorMessage(error));
-      if (data.user) setUser({ id: data.user.id, email: data.user.email });
+      if (data.user) setUser({ id: data.user.id });
       await loadProfile();
     },
     [loadProfile],
   );
 
   /**
-   * Sign in with EITHER an email address OR a registered phone number.
+   * Phone + password sign-in.
    *
-   * An email goes straight to Supabase. A phone number is first resolved to the
-   * account's email by `resolvePhoneLogin` (which verifies the typed password
-   * against GoTrue's bcrypt hash and refuses to reveal anything otherwise); the
-   * browser then signs in with that email, so GoTrue checks the password itself
-   * and issues the session exactly as it does for email sign-in.
+   * `resolvePhoneLogin` verifies the typed password against GoTrue's own bcrypt
+   * hash and only then returns the account's credential email; the browser signs
+   * in with it, so GoTrue checks the password a second time and issues the
+   * session. A wrong password, an unknown number and a number shared by two
+   * accounts are all indistinguishable from the outside.
    */
-  const signInWithIdentifier = useCallback(
-    async (identifier: string, password: string) => {
-      const value = identifier.trim();
-      if (!value) throw new Error("Enter your email address or phone number");
-
-      if (!isPhoneIdentifier(value)) {
-        await signIn(value, password);
-        return;
-      }
+  const signInWithPhone = useCallback(
+    async (phone: string, password: string) => {
+      const value = requirePhone(phone);
+      if (!password) throw new Error("Enter your password");
 
       const resolved = (await resolvePhone({ data: { phone: value, password } })) as {
         email: string;
       };
-      await signIn(resolved.email, password);
+      await signInWithCredential(resolved.email, password);
     },
-    [signIn, resolvePhone],
+    [signInWithCredential, resolvePhone],
   );
 
-  /**
-   * Create an account. When the project has "Confirm email" enabled Supabase
-   * emails a link and there is no session yet, so the caller must tell the
-   * player to open it.
-   */
+  /** REGISTRATION step 1 — ask for a code for a number with no account yet. */
+  const requestSignupCode = useCallback(
+    async (phone: string): Promise<string> => {
+      const value = requirePhone(phone);
+      await requestSignupFn({ data: { phone: value } });
+      return value;
+    },
+    [requestSignupFn],
+  );
+
+  /** REGISTRATION step 2 — verify the code, create the account, sign in. */
   const signUp = useCallback(
-    async (input: SignUpInput): Promise<SignUpOutcome> => {
-      const email = input.email.trim().toLowerCase();
-      const phone = normalizePhone(input.phone);
-      if (!phone) throw new Error("Enter a valid phone number, e.g. 0772 000 000");
+    async (input: SignUpInput): Promise<void> => {
+      const phone = requirePhone(input.phone);
+      const code = input.code.trim();
+      if (!/^\d{4,8}$/.test(code)) {
+        throw new Error("Enter the verification code sent to your phone");
+      }
       if (input.password.length < MIN_PASSWORD_LENGTH) {
         throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       }
@@ -219,74 +212,59 @@ export function useAuth() {
         throw new Error("Confirm you are 25 or older and accept the terms");
       }
 
-      const redirectTo = authRedirectUrl();
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password: input.password,
-        options: {
-          ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
-          data: {
-            display_name: input.fullName.trim(),
-            full_name: input.fullName.trim(),
-            phone,
-            date_of_birth: input.dateOfBirth || null,
-            national_id: input.nationalId.trim(),
-            country_code: "UG",
-            contact_email: email,
-            terms_accepted: true,
-          },
+      await registerFn({
+        data: {
+          phone,
+          code,
+          password: input.password,
+          displayName: input.fullName.trim(),
+          dateOfBirth: input.dateOfBirth,
+          nationalId: input.nationalId.trim(),
         },
       });
-      if (error) throw new Error(authErrorMessage(error));
 
-      // With "Confirm email" on, Supabase returns an obfuscated user with no
-      // identities when the address is already registered.
-      if (data.user?.identities && data.user.identities.length === 0) {
-        throw new Error("That email already has an account — sign in instead");
-      }
-
-      const needsEmailConfirmation = !data.session;
-      if (data.session?.user) {
-        setUser({ id: data.session.user.id, email: data.session.user.email });
-        await loadProfile();
-      }
-      return { needsEmailConfirmation, email };
+      // The account exists now, created through the admin API. Open the session
+      // with the password the player just chose — the credential email is derived
+      // here, in the browser, from the number they already gave us.
+      await signInWithCredential(phoneToAuthEmail(phone), input.password);
     },
-    [loadProfile],
+    [registerFn, signInWithCredential],
   );
 
-  /** Re-sends the signup confirmation email. */
-  const resendConfirmation = useCallback(async (email: string) => {
-    const redirectTo = authRedirectUrl();
-    const { error } = await supabase.auth.resend({
-      type: "signup",
-      email: email.trim().toLowerCase(),
-      ...(redirectTo ? { options: { emailRedirectTo: redirectTo } } : {}),
-    });
-    if (error) throw new Error(authErrorMessage(error));
-  }, []);
+  /** PASSWORD RESET step 1 — ask for a code on a registered number. */
+  const requestResetCode = useCallback(
+    async (phone: string): Promise<string> => {
+      const value = requirePhone(phone);
+      await requestResetFn({ data: { phone: value } });
+      return value;
+    },
+    [requestResetFn],
+  );
 
-  /** Emails a password-reset link that returns to /auth. */
-  const sendPasswordReset = useCallback(async (email: string) => {
-    const redirectTo = authRedirectUrl();
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-      ...(redirectTo ? { redirectTo } : {}),
-    });
-    if (error) throw new Error(authErrorMessage(error));
-  }, []);
+  /** PASSWORD RESET step 2 — verify the code, set the password, sign in. */
+  const resetPassword = useCallback(
+    async (phone: string, code: string, password: string): Promise<void> => {
+      const value = requirePhone(phone);
+      if (!/^\d{4,8}$/.test(code.trim())) {
+        throw new Error("Enter the verification code sent to your phone");
+      }
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+      }
 
-  /**
-   * Sets a new password for the current session — used after a reset link (the
-   * recovery session) and for a voluntary password change while signed in.
-   */
+      await resetFn({ data: { phone: value, code: code.trim(), password } });
+      await signInWithCredential(phoneToAuthEmail(value), password);
+    },
+    [resetFn, signInWithCredential],
+  );
+
+  /** Sets a new password for the current session (signed-in change). */
   const setPassword = useCallback(async (password: string) => {
     if (password.length < MIN_PASSWORD_LENGTH) {
       throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
     }
     const { error } = await supabase.auth.updateUser({ password });
     if (error) throw new Error(authErrorMessage(error));
-    // The new password is live: leave the recovery flow behind.
-    setRecovery(false);
   }, []);
 
   const signOut = useCallback(async () => {
@@ -300,14 +278,15 @@ export function useAuth() {
     profile,
     loading,
     isAuthenticated: !!user,
-    /** True while the player must choose a new password after a reset link. */
-    recovery,
-    signIn,
-    /** Email *or* phone number + password. */
-    signInWithIdentifier,
+    /** Phone number + password, verified through the phone-login resolver. */
+    signInWithPhone,
+    /** Registration: ask for the code, then `signUp()` with it. */
+    requestSignupCode,
     signUp,
-    resendConfirmation,
-    sendPasswordReset,
+    /** Password reset: ask for the code, then `resetPassword()` with it. */
+    requestResetCode,
+    resetPassword,
+    /** Change the password of an already signed-in session. */
     setPassword,
     signOut,
     refreshProfile: loadProfile,

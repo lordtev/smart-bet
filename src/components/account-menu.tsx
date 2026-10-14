@@ -26,6 +26,7 @@ import { formatUgx } from "@/lib/betting-data";
 import { ThemeToggle } from "./theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import { useWallet } from "@/hooks/use-wallet";
+import { formatPhone } from "@/modules/auth/phone";
 
 const guestLinks = [
   { to: "/auth" as const, label: "Sign in / Register", icon: LogIn },
@@ -42,12 +43,12 @@ const authLinks = [
 
 export function AccountMenu() {
   const [open, setOpen] = useState(false);
-  const { isAuthenticated, user, profile, signOut, loading: authLoading } = useAuth();
+  const { isAuthenticated, profile, signOut, loading: authLoading } = useAuth();
   const { balance, loading: walletLoading } = useWallet();
   const displayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
     profile?.username ||
-    user?.email ||
+    (profile?.phone ? formatPhone(profile.phone) : null) ||
     "Player";
 
   useEffect(() => {
@@ -86,7 +87,9 @@ export function AccountMenu() {
                 <p className="mt-1 truncate text-xs font-semibold opacity-90">
                   {authLoading ? "…" : displayName}
                 </p>
-                {user?.email && <p className="truncate text-[11px] opacity-70">{user.email}</p>}
+                {profile?.phone && (
+                  <p className="truncate text-[11px] opacity-70">{formatPhone(profile.phone)}</p>
+                )}
               </div>
             </div>
           )}

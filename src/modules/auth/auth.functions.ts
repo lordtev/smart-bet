@@ -5,9 +5,11 @@ import { loose } from "@/integrations/supabase/loose";
  * Server functions for the application side of the account: the `profiles` row,
  * the `wallets` row and sign-in bookkeeping.
  *
- * AUTHENTICATION ITSELF IS SUPABASE AUTH (email + password)
- * - Credentials live in `auth.users`; GoTrue stores a bcrypt hash and verifies
- *   the password. The browser calls `supabase.auth.signInWithPassword()`
+ * AUTHENTICATION ITSELF IS SUPABASE AUTH (phone number + password)
+ * - SMARTBET collects no email address. The player's credential is their phone
+ *   number: `resolve_phone_login()` maps it to the account, and GoTrue stores and
+ *   verifies the bcrypt password behind a synthetic address derived from that
+ *   number (see modules/auth/phone.ts). The browser then opens the session
  *   directly, so this app never sees, stores or compares a password.
  * - These functions only run AFTER Supabase has accepted a bearer token
  *   (requireSupabaseAuth verifies the JWT and hands us `userId`).
@@ -31,7 +33,7 @@ import { normalizePhone } from "./phone";
 const profileSchema = z.object({
   id: z.string().uuid(),
   username: z.string().nullable(),
-  /** Contact email — also the identifier Supabase Auth checks the password against. */
+  /** Contact email. Always null for phone accounts — SMARTBET collects none. */
   email: z.string().nullable(),
   phone: z.string().nullable(),
   first_name: z.string().nullable(),
@@ -104,7 +106,9 @@ export const getCurrentUserProfile = createServerFn({ method: "GET" })
     if (!existing) {
       const insert = {
         id: userId,
-        email: asText(meta["contact_email"]),
+        // Phone accounts have no email; the credential address is synthetic and
+        // deliberately never surfaces as contact detail.
+        email: null,
         phone,
         first_name: first,
         last_name: last,
