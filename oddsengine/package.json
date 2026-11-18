@@ -1,0 +1,34 @@
+{
+  "name": "smartbet-oddsengine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Provider-independent odds aggregation engine for the SMARTBET sportsbook. Fetches odds from external providers, normalises them into the shared Supabase catalogue, and publishes the book's price to the website.",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/cli/main.ts all",
+    "live": "node --env-file-if-exists=.env src/cli/main.ts live",
+    "prematch": "node --env-file-if-exists=.env src/cli/main.ts prematch",
+    "once": "node --env-file-if-exists=.env src/cli/main.ts once",
+    "mock": "node --env-file-if-exists=.env src/cli/main.ts once --provider=mock",
+    "scan": "node --env-file-if-exists=.env src/cli/main.ts scan",
+    "doctor": "node --env-file-if-exists=.env src/cli/main.ts doctor",
+    "seed": "node scripts/apply-seed.mjs",
+    "purge": "node scripts/purge-placeholder-data.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.9"
+  }
+}

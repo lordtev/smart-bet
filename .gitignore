@@ -20,6 +20,17 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Environment files — never commit credentials.
+#
+# NOTE: `.env` is currently TRACKED in this repository and holds a live
+# SUPABASE_SERVICE_ROLE_KEY. Adding these rules does not untrack it; removing it
+# from the index (`git rm --cached .env`) and rotating the key is a deliberate,
+# separate decision for the repository owner. The odds engine adds provider API
+# keys, which must never follow the same path.
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
